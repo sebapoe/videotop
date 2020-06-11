@@ -13,8 +13,8 @@ class DownloadThread(threading.Thread):
         # create the youtube-dl subprocess
         file = title + '.%(ext)s'
         output = '--output=' + file
-        max_quality = '--max-quality=35'
-        command = ['youtube-dl', '--no-part', '--continue', max_quality, output, url]
+        #max_quality = '--max-quality=35'
+        command = ['youtube-dl', '--no-part','--continue', output, url]
         self.download_process = Popen(command, stdout=PIPE, universal_newlines=True)
 
     def kill(self):

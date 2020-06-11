@@ -1,39 +1,66 @@
-import gdata.youtube
-import gdata.youtube.service
 import webbrowser
 import subprocess
 import locale
 import download_thread
 import os
 
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 locale.setlocale(locale.LC_ALL, '')
 
 
 class YouTubeClient:
+    
+    DEVELOPER_KEY = 'AIzaSyDbzki3busW9XM2cOGIn1ciVXXuo_nEIkU'
+    YOUTUBE_API_SERVICE_NAME = 'youtube'
+    YOUTUBE_API_VERSION = 'v3'
+    
     def __init__(self):
-        self.yt_service = gdata.youtube.service.YouTubeService()
+        self.youtube = build(self.YOUTUBE_API_SERVICE_NAME, self.YOUTUBE_API_VERSION,
+            developerKey=self.DEVELOPER_KEY)
         self.max_results = 25
         self.last_search = None
 
     def search(self, search_terms, page=1):
-        self.last_search = [search_terms, page]
-        query = gdata.youtube.service.YouTubeVideoQuery()
-        query.vq = search_terms
-        # query.start_index is 1 based
-        query.start_index = (page - 1) * int(self.max_results) + 1
-        query.max_results = self.max_results
-        try:
-            feed = self.yt_service.YouTubeQuery(query)
-            return self.get_videos(feed)
-        except gdata.service.RequestError:
-            return []
 
-    def get_videos(self, feed):
+        search_response = self.youtube.search().list(
+            q=search_terms,
+            part='id,snippet',
+            maxResults=self.max_results,
+            type="video"
+        ).execute()
+        
         videos = []
+
+        try:
+            videos = self.get_videos(search_response)
+        except:
+            videos = []
+        
+        """ 
+        for search_result in search_response.get('items', []):
+            if search_result['id']['kind'] == 'youtube#video':
+                video_title = search_result["snippet"]["title"]
+                video_id = search_result["id"]["videoId"]
+                videos.append("{} {}".format(video_title, video_id)) 
+        """
+        return videos
+
+    def get_videos(self, search_response):
+        #@@seb Rewrite YoutubeVideo class
+        videos = []
+        
+        for search_result in search_response.get('items', []):
+            #if search_result['id']['kind'] == "youtube#video":
+            new_video = YouTubeVideo(search_result)
+            videos.append(new_video)
+ 
+        """
         for entry in feed.entry:
             new_video = YouTubeVideo(entry)
             videos.append(new_video)
+        """
         return videos
 
     def next_page(self):
@@ -53,37 +80,40 @@ class YouTubeVideo:
 
     def __init__(self, entry):
         self.entry = entry
-        self.title = entry.media.title.text
+        self.title = entry["snippet"]["title"]
         self.download_process = None
 
         # replace slashes with html code &#47;
         self.filename = self.title.replace('/', '&#47;')
 
         try:
-            self.url = entry.media.player.url
-            self.description = entry.media.description.text
-            self.author = entry.author[0].name.text
-            self.published = entry.published.text.split('T')[0]
+            self.url = "https://www.youtube.com/watch?v={}".format(self.entry["id"]["videoId"])
+            self.description = self.entry["snippet"]["description"]
+            self.author = "not done yet"
+            self.published = d["snippet"]["publishTime"]
         except:
             # dunno, local video
             self.author = 'N/A'
             self.published = 'N/A'
 
         try:
-            self.duration = entry.media.duration.seconds
+            # duration todo 
+            self.duration = "00:00:00"
             self.duration = self.get_formatted_duration()
         except AttributeError:
             self.duration = 'N/A'
 
         try:
-            self.views = entry.statistics.view_count
-            self.views = self.get_formatted_views()
+            #self.views = entry.statistics.view_count
+            #self.views = self.get_formatted_views()
+            self.views = "0"
         except AttributeError:
             self.views = 'N/A'
 
         try:
-            self.rating = entry.rating.average
-            self.rating = str(round(float(self.rating), 1))
+            #self.rating = entry.rating.average
+            #self.rating = str(round(float(self.rating), 1))
+            self.rating = "0"
         except AttributeError:
             self.rating = 'N/A'
 
@@ -103,17 +133,19 @@ class YouTubeVideo:
             return 'Aborting downloading "' + self.title + '" failed'
 
     def get_formatted_duration(self):
-        m, s = divmod(int(self.duration), 60)
-        h, m = divmod(m, 60)
-        formatted_duration = "%d:%02d:%02d" % (h, m, s)
-        return formatted_duration
+        #m, s = divmod(int(self.duration), 60)
+        #h, m = divmod(m, 60)
+        #formatted_duration = "%d:%02d:%02d" % (h, m, s)
+        #return formatted_duration
+        #todo 
+        return "00:00:00"
 
     def get_formatted_views(self):
         return locale.format('%d', int(self.views), grouping=True)
 
     def play(self):
         devnull = open(os.devnull)
-        extensions = ['.flv', '.mp4', '.webm']
+        extensions = ['.flv', '.mp4', '.webm', '.mkv']
         for ext in extensions:
             file = self.filename + ext
             if os.path.exists(file):
@@ -122,8 +154,11 @@ class YouTubeVideo:
         return False
 
     def stream(self):
-        cookie = '/tmp/videotop_cookie'
-        c1 = ['youtube-dl', '--get-url', '--max-quality=34', '--cookies=' + cookie, self.url]
-        stream = subprocess.check_output(c1).strip()
-        c2 = ['mplayer', '-msgcolor', '-title', self.title, '-prefer-ipv4', '-cookies', '-cookies-file', cookie, stream]
-        subprocess.call(c2)
+        #cookie = '/tmp/videotop_cookie'
+        #c1 = ['youtube-dl', '--get-url', '--cookies=' + cookie, self.url]
+        #stream = subprocess.check_output(c1).strip()
+        #c2 = ['mplayer', '-msgcolor', '-title', self.title, '-prefer-ipv4', '-cookies', '-cookies-file', cookie, stream]
+        #subprocess.call(c2)
+        cli = ['mpv', '-ytdl-format=bestvideo+bestaudio', self.url]
+        subprocess.call(cli)
+
